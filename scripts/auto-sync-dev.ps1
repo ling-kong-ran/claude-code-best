@@ -23,6 +23,13 @@ function Success($message) {
   exit 0
 }
 
+function ResetToOriginDev() {
+  $originDev = git rev-parse origin/$branch
+  if ($LASTEXITCODE -ne 0) { Fail 'failed to resolve origin/dev' }
+  git reset --hard $originDev.Trim() | Out-Null
+  if ($LASTEXITCODE -ne 0) { Fail 'failed to reset dev to origin/dev' }
+}
+
 $gitStatus = git status --porcelain
 if ($LASTEXITCODE -ne 0) { Fail 'git status failed' }
 if ($gitStatus) { Fail 'working tree is not clean' }
@@ -40,11 +47,7 @@ if ($LASTEXITCODE -ne 0) { Fail 'git fetch origin failed' }
 git fetch upstream
 if ($LASTEXITCODE -ne 0) { Fail 'git fetch upstream failed' }
 
-$originDev = git rev-parse origin/$branch
-if ($LASTEXITCODE -ne 0) { Fail 'failed to resolve origin/dev' }
-
-git reset --hard $originDev.Trim()
-if ($LASTEXITCODE -ne 0) { Fail 'failed to reset dev to origin/dev' }
+ResetToOriginDev
 
 $behindAheadRaw = git rev-list --left-right --count HEAD...$upstreamBranch
 if ($LASTEXITCODE -ne 0) { Fail 'failed to compare dev with upstream/main' }
@@ -61,17 +64,27 @@ if ($right -eq 0) {
 git merge --no-edit $upstreamBranch
 if ($LASTEXITCODE -ne 0) {
   git merge --abort | Out-Null
+  ResetToOriginDev
   Fail 'merge conflict or merge failure while merging upstream/main into dev'
 }
 
 bun run dev --help | Out-Null
-if ($LASTEXITCODE -ne 0) { Fail 'bun run dev --help failed after merge' }
+if ($LASTEXITCODE -ne 0) {
+  ResetToOriginDev
+  Fail 'bun run dev --help failed after merge; reverted local dev back to origin/dev'
+}
 
 bun run build | Out-Null
-if ($LASTEXITCODE -ne 0) { Fail 'bun run build failed after merge' }
+if ($LASTEXITCODE -ne 0) {
+  ResetToOriginDev
+  Fail 'bun run build failed after merge; reverted local dev back to origin/dev'
+}
 
 $pushOutput = git push origin $branch 2>&1
-if ($LASTEXITCODE -ne 0) { Fail "git push failed: $pushOutput" }
+if ($LASTEXITCODE -ne 0) {
+  ResetToOriginDev
+  Fail "git push failed: $pushOutput"
+}
 
 $newHead = git rev-parse --short HEAD
 if ($LASTEXITCODE -ne 0) { Fail 'failed to resolve final HEAD' }
