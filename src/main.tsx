@@ -56,7 +56,6 @@ import {
 	parseFileSpecs,
 } from "./services/api/filesApi.js";
 import { prefetchPassesEligibility } from "./services/api/referral.js";
-import { prefetchOfficialMcpUrls } from "./services/mcp/officialRegistry.js";
 import type {
 	McpSdkServerConfig,
 	McpServerConfig,
@@ -689,7 +688,6 @@ export function startDeferredPrefetches(): void {
 
 	// Analytics and feature flag initialization
 	void initializeAnalyticsGates();
-	void prefetchOfficialMcpUrls();
 
 	void refreshModelCapabilities();
 
@@ -2393,7 +2391,7 @@ async function run(): Promise<CommanderCommand> {
 							`Warning: MCP ${plural(blocked.length, "server")} blocked by enterprise policy: ${blocked.join(", ")}\n`,
 						);
 					}
-					dynamicMcpConfig = { ...dynamicMcpConfig, ...allowed };
+					dynamicMcpConfig = { ...dynamicMcpConfig, ...(allowed as Record<string, ScopedMcpServerConfig>) };
 				}
 			}
 
@@ -3473,7 +3471,7 @@ async function run(): Promise<CommanderCommand> {
 				// login state are fully loaded.
 				const orgValidation = await validateForceLoginOrg();
 				if (!orgValidation.valid) {
-					await exitWithError(root, orgValidation.message);
+					await exitWithError(root, (orgValidation as { valid: false; message: string }).message);
 				}
 			}
 
@@ -3850,7 +3848,7 @@ async function run(): Promise<CommanderCommand> {
 				// Validate org restriction for non-interactive sessions
 				const orgValidation = await validateForceLoginOrg();
 				if (!orgValidation.valid) {
-					process.stderr.write(orgValidation.message + "\n");
+					process.stderr.write((orgValidation as { valid: false; message: string }).message + "\n");
 					process.exit(1);
 				}
 
@@ -4394,9 +4392,9 @@ async function run(): Promise<CommanderCommand> {
 				// KAIROS block so Agent(name: "foo") can spawn in-process teammates
 				// without TeamCreate. computeInitialTeamContext() is for tmux-spawned
 				// teammates reading their own identity, not the assistant-mode leader.
-				teamContext: feature("KAIROS")
-					? (assistantTeamContext ?? computeInitialTeamContext?.())
-					: computeInitialTeamContext?.(),
+				teamContext: (feature("KAIROS")
+					? (assistantTeamContext ?? computeInitialTeamContext())
+					: computeInitialTeamContext()) as AppState["teamContext"],
 			};
 
 			// Add CLI initial prompt to history
@@ -4458,7 +4456,7 @@ async function run(): Promise<CommanderCommand> {
 				...(uploaderReady && {
 					onTurnComplete: (messages: MessageType[]) => {
 						void uploaderReady.then((uploader) =>
-							uploader?.(messages),
+							(uploader as ((msgs: MessageType[]) => void) | null)?.(messages),
 						);
 					},
 				}),
@@ -4616,13 +4614,13 @@ async function run(): Promise<CommanderCommand> {
 					createLocalSSHSession,
 					SSHSessionError,
 				} = await import("./ssh/createSSHSession.js");
-				let sshSession;
+				let sshSession: import('./ssh/createSSHSession.js').SSHSession | undefined;
 				try {
 					if (_pendingSSH.local) {
 						process.stderr.write(
 							"Starting local ssh-proxy test session...\n",
 						);
-						sshSession = createLocalSSHSession({
+						sshSession = await createLocalSSHSession({
 							cwd: _pendingSSH.cwd,
 							permissionMode: _pendingSSH.permissionMode,
 							dangerouslySkipPermissions:
@@ -4649,7 +4647,7 @@ async function run(): Promise<CommanderCommand> {
 							},
 							isTTY
 								? {
-										onProgress: (msg) => {
+										onProgress: (msg: string) => {
 											hadProgress = true;
 											process.stderr.write(
 												`\r  ${msg}\x1b[K`,
@@ -6023,8 +6021,8 @@ async function run(): Promise<CommanderCommand> {
 				async (
 					ccUrl: string,
 					opts: {
-						print?: string | boolean;
-						outputFormat: string;
+						print?: string | true;
+						outputFormat?: string;
 					},
 				) => {
 					const { parseConnectUrl } =
