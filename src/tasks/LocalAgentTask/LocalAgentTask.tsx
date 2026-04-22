@@ -17,9 +17,9 @@ import type { SetAppState, Task, TaskStateBase } from '../../Task.js'
 import { createTaskStateBase } from '../../Task.js'
 import type { Tools } from '../../Tool.js'
 import { findToolByName } from '../../Tool.js'
-import type { AgentToolResult } from '../../tools/AgentTool/agentToolUtils.js'
-import type { AgentDefinition } from '../../tools/AgentTool/loadAgentsDir.js'
-import { SYNTHETIC_OUTPUT_TOOL_NAME } from '../../tools/SyntheticOutputTool/SyntheticOutputTool.js'
+import type { AgentToolResult } from '@claude-code-best/builtin-tools/tools/AgentTool/agentToolUtils.js'
+import type { AgentDefinition } from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
+import { SYNTHETIC_OUTPUT_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/SyntheticOutputTool/SyntheticOutputTool.js'
 import { asAgentId } from '../../types/ids.js'
 import type { Message } from '../../types/message.js'
 import {
@@ -106,7 +106,10 @@ export function updateProgressFromMessage(
   if (message.type !== 'assistant') {
     return
   }
-  const usage = message.message!.usage as BetaUsage
+  const usage = message.message!.usage as BetaUsage | undefined
+  if (!usage) {
+    return
+  }
   // Keep latest input (it's cumulative in the API), sum outputs
   tracker.latestInputTokens =
     (usage.input_tokens as number) +
