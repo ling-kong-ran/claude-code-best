@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { __test } from "../index";
+import { __test, ColorFile } from "../index";
 
 const { ansi256FromRgb, colorToEscape, detectColorMode, detectLanguage, tokenize } = __test;
 
@@ -98,5 +98,18 @@ describe("tokenize", () => {
 		const text = "foo bar baz";
 		const tokens = tokenize(text);
 		expect(tokens.join("")).toBe(text);
+	});
+});
+
+describe("ColorFile", () => {
+	test("renders highlighted output with line numbers", () => {
+		const colorFile = new ColorFile("const value = 1", "example.ts");
+		const rendered = colorFile.render("dark", 80, false);
+
+		expect(rendered).not.toBeNull();
+		expect(rendered?.length).toBe(1);
+		expect(rendered?.[0]).toContain("const");
+		expect(rendered?.[0]).toContain("1 ");
+		expect(rendered?.[0]).toContain("\x1b[");
 	});
 });

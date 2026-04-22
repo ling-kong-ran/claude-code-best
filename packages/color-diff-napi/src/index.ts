@@ -17,34 +17,25 @@
  *   getSyntaxTheme always returns the default for the given Claude theme.
  */
 
-import { createRequire } from 'node:module'
 import { diffArrays } from 'diff'
-import type * as hljsNamespace from 'highlight.js'
+import hljsModule from 'highlight.js'
 import { basename, extname } from 'path'
 
-// createRequire works in both Bun and Node.js ESM contexts.
-// Needed because this package is "type": "module" but uses require() for
-// lazy loading — bare require is not available in Node.js ESM.
-const nodeRequire = createRequire(import.meta.url)
-
-// Lazy: defers loading highlight.js until first render. The full bundle
-// registers 190+ language grammars at require time (~50MB, 100-200ms on
-// macOS, several× that on Windows). With a top-level import, any caller
-// chunk that reaches this module — including test/preload.ts via
-// StructuredDiff.tsx → colorDiff.ts — pays that cost at module-eval time
-// and carries the heap for the rest of the process. On Windows CI this
-// pushed later tests in the same shard into GC-pause territory and a
-// beforeEach/afterEach hook timeout (officialRegistry.test.ts, PR #24150).
-// Same lazy pattern the NAPI wrapper used for dlopen.
-type HLJSApi = typeof hljsNamespace.default
-let cachedHljs: HLJSApi | null = null
+// This module previously lazy-loaded highlight.js with createRequire() because
+// registering the full language set is expensive: it increases cold-start time,
+// retains a large chunk of heap, and previously contributed to Windows CI test
+// timeouts when loaded eagerly.
+//
+// We now use a static import anyway because the compiled `ccb.exe` must have
+// highlight.js bundled inside the executable. The lazy runtime resolution path
+// could fall back to resolving from `B:\~BUN\root\ccb.exe`, which is exactly the
+// intermittent production failure we are fixing here.
+//
+// Keep the accessor so the rest of this file can stay unchanged.
+type HLJSApi = typeof hljsModule
+const cachedHljs: HLJSApi = hljsModule
 function hljs(): HLJSApi {
-  if (cachedHljs) return cachedHljs
-  const mod = nodeRequire('highlight.js')
-  // highlight.js uses `export =` (CJS). Under bun/ESM the interop wraps it
-  // in .default; under node CJS the module IS the API. Check at runtime.
-  cachedHljs = 'default' in mod && mod.default ? mod.default : mod
-  return cachedHljs!
+  return cachedHljs
 }
 
 // Use Bun.stringWidth when available, otherwise fall back to simple .length
